@@ -12,9 +12,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - GitHub Actions CI workflow for automated validation (fmt, clippy, build, test) (#10).
-- IPC-domain aliases `IpcSpikeBatch` / `IpcTraceBatch` and rustdoc/README notes
-  that `SpikeBatch` / `TraceBatch` are wire types, not SynapticDistill.jl
-  training structs (RM-324, #7). Serialization tests lock the JSON keys.
+- Deprecated compatibility aliases after the #20 IPC rename (RM-334, #13, LIM-169):
+  - `RuntimeBackend` → `IpcBackend`
+  - `ZmqRuntimeBackend` → `ZmqIpcBackend`
+  - `BackendType::ZmqRuntime` → `BackendType::ZmqIpc`
+  Both current and deprecated ZMQ selectors construct `ZmqIpcBackend`.
+  Compile-time tests assert that `RustBackend` and `ZmqIpcBackend` implement `IpcBackend`.
 
 ### Changed
 

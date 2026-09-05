@@ -18,8 +18,16 @@ struct SafeSocket {
 unsafe impl Send for SafeSocket {}
 unsafe impl Sync for SafeSocket {}
 
+/// Deprecated compatibility name for [`ZmqIpcBackend`].
+#[deprecated(since = "0.1.0", note = "renamed to ZmqIpcBackend")]
+pub type ZmqRuntimeBackend = ZmqIpcBackend;
+
 /// Generic IPC backend — subscribes to the remote compute's ZMQ PUB socket and
 /// returns the latest compute readouts on each call.
+///
+/// Implements [`IpcBackend`]. This backend is a binary readout subscriber, not
+/// a [`crate::HybridFlowBackend`]: it does not send or receive structured
+/// `SpikeBatch` / `TraceBatch` messages.
 ///
 /// # Wire format
 /// The packet consists of an 8-byte header followed by a variable number of
@@ -225,6 +233,15 @@ mod tests {
         for (i, val) in readout.iter().enumerate().take(20) {
             assert!((b.last_readout[i] - val).abs() < 1e-5);
         }
+    }
+
+    #[test]
+    #[allow(deprecated)]
+    fn deprecated_alias_is_same_type() {
+        fn same(backend: crate::ZmqRuntimeBackend) -> ZmqIpcBackend {
+            backend
+        }
+        let _ = same(ZmqIpcBackend::new());
     }
 
     #[test]

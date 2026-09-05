@@ -6,8 +6,10 @@
 //!
 //! Provides a unified interface for various backends:
 //!
+//! - [`IpcBackend`] — required backend contract (deprecated alias: `RuntimeBackend`)
 //! - [`RustBackend`] — pure-Rust native backend (no external deps, always available)
-//! - `ZmqIpcBackend` — IPC backend via ZMQ SUB socket (feature `zmq`)
+//! - `ZmqIpcBackend` — IPC backend via ZMQ SUB socket (feature `zmq`;
+//!   deprecated alias: `ZmqRuntimeBackend`)
 
 pub mod error;
 pub mod models;
@@ -27,7 +29,11 @@ pub use models::{
 };
 /// Re-export the core trait, factory, and backend.
 pub use rust_backend::RustBackend;
-pub use trait_def::{BackendFactory, BackendType, HybridFlowBackend, IpcBackend};
+#[allow(deprecated)]
+pub use trait_def::{BackendFactory, BackendType, HybridFlowBackend, IpcBackend, RuntimeBackend};
 
 #[cfg(feature = "zmq")]
 pub use zmq_backend::ZmqIpcBackend;
+#[cfg(feature = "zmq")]
+#[allow(deprecated)]
+pub use zmq_backend::ZmqRuntimeBackend;

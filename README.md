@@ -8,9 +8,9 @@ Inter-Process Communication (IPC) library for bridging Rust to external compute 
 
 ## Features
 
-- `IpcBackend` trait for backend-agnostic signal processing
+- `IpcBackend` trait for backend-agnostic signal processing (deprecated alias: `RuntimeBackend`)
 - `RustBackend` reference backend (always available)
-- `ZmqIpcBackend` backend via ZMQ SUB socket (feature `zmq`)
+- `ZmqIpcBackend` backend via ZMQ SUB socket (feature `zmq`; deprecated alias: `ZmqRuntimeBackend`)
 - Canonical protocol models:
   - `IpcMessage`
   - `SpikeBatch`, `SpikeEvent` (IPC wire types; alias `IpcSpikeBatch`)
@@ -78,9 +78,10 @@ wire format.
 
 - Backends and traits:
   - `IpcBackend`, `HybridFlowBackend`
-  - `BackendType`
+  - `BackendType` (`Rust`, `ZmqIpc`; deprecated `ZmqRuntime` still selects ZMQ)
   - `RustBackend`
   - `ZmqIpcBackend` (when `zmq` feature enabled)
+  - Deprecated compatibility aliases: `RuntimeBackend`, `ZmqRuntimeBackend`
 - Models:
   - `IpcMessage` and all batch/config/trace/gradient payload structs
   - `IpcSpikeBatch` / `IpcTraceBatch` aliases for the IPC wire batches
