@@ -21,6 +21,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Documented the rationale for keeping the `SpikeBatch` / `TraceBatch` Rust
+  names: serde identifiers and existing imports stay stable. No wire-format
+  change (RM-324, #7).
 - Switched license from GPL-3.0-or-later to dual MIT/Apache-2.0 for broader adoptability as core IPC infrastructure (#11).
 - **Breaking rename**: Generalized IPC terminology across the public API (#8):
   - `RuntimeBackend` → `IpcBackend`
