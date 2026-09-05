@@ -1,6 +1,27 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
 //! Data types that flow over the compute backend IPC wire.
+//!
+//! # Transport types vs training types
+//!
+//! [`SpikeBatch`] and [`TraceBatch`] in this crate are **IPC transport / wire
+//! payloads**. They are owned by `corpus-ipc` and serialized on the hybrid-flow
+//! message bus (`IpcMessage::Spikes`, `IpcMessage::EligibilityTraces`).
+//!
+//! They are **not** the same types as `SpikeBatch` / `TraceBatch` in
+//! [`SynapticDistill.jl`](https://github.com/rmems/SynapticDistill.jl)
+//! (`src/types.jl`). Those are **training-facing** in-memory batches:
+//!
+//! | | `corpus-ipc` (this crate) | `SynapticDistill.jl` |
+//! |---|---------------------------|----------------------|
+//! | Domain | IPC wire / session routing | SNN training step |
+//! | `SpikeBatch` | `session_id`, `batch_id`, timestamped [`SpikeEvent`]s | spike trains (`spikes`), optional `times` / `targets` |
+//! | `TraceBatch` | `session_id`, `batch_id`, typed [`TraceData`] rows | unstructured `traces` for e-prop / credit assignment |
+//!
+//! Keep the Rust names `SpikeBatch` / `TraceBatch` so serde identifiers and
+//! existing imports stay stable. Prefer [`IpcSpikeBatch`] / [`IpcTraceBatch`]
+//! when the cross-repo collision would otherwise be unclear. Do not merge the
+//! IPC and training definitions.
 
 use serde::{Deserialize, Serialize};
 
@@ -56,9 +77,14 @@ impl NeuromodulatorSnapshot {
 /// - Input messages (spikes, embeddings, config)
 /// - Output messages (gradients, traces, training status)
 /// - Control messages (shutdown, ping)
+///
+/// Variant names (`Spikes`, `EligibilityTraces`, …) are serde identifiers and
+/// must stay stable. The payloads they wrap are IPC transport types, not
+/// SynapticDistill training structs (see the module docs).
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub enum IpcMessage {
     // Input messages
+    /// Wire envelope for an IPC [`SpikeBatch`] (not a SynapticDistill training batch).
     Spikes(SpikeBatch),
     Embeddings(EmbeddingBatch),
     Loss(f32),
@@ -66,6 +92,7 @@ pub enum IpcMessage {
 
     // Output messages
     GradientUpdate(GradientBatch),
+    /// Wire envelope for an IPC [`TraceBatch`] (not a SynapticDistill training batch).
     EligibilityTraces(TraceBatch),
     TrainingComplete,
 
@@ -74,7 +101,19 @@ pub enum IpcMessage {
     Ping,
 }
 
-/// Batch of spike events from compute processing.
+/// IPC transport batch of spike events from compute processing.
+///
+/// This is a **wire-level** payload for [`IpcMessage::Spikes`]. Field names
+/// and layout are part of the serialized protocol and must not be changed
+/// casually.
+///
+/// **Not** [`SynapticDistill.jl`](https://github.com/rmems/SynapticDistill.jl)'s
+/// training `SpikeBatch` (`spikes` / `times` / `targets`). That type is an
+/// in-memory training batch; this type is a session-correlated list of
+/// [`SpikeEvent`]s. Use [`IpcSpikeBatch`] when the name collision matters.
+///
+/// Names stay `SpikeBatch` so existing Rust imports and serde identifiers
+/// remain compatible (RM-324 / #7).
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Default)]
 pub struct SpikeBatch {
     /// Optional session ID for concurrent experiment isolation.
@@ -89,7 +128,15 @@ pub struct SpikeBatch {
     pub metadata: Option<BatchMetadata>,
 }
 
+/// Explicit IPC-domain name for [`SpikeBatch`].
+///
+/// Same type and same wire format. Prefer this alias in new code that sits
+/// next to SynapticDistill training types.
+pub type IpcSpikeBatch = SpikeBatch;
+
 /// Individual spike event with channel, timing, and strength.
+///
+/// An element of an IPC [`SpikeBatch`], not a SynapticDistill training row.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Default)]
 pub struct SpikeEvent {
     /// Compute channel or channel identifier.
@@ -135,7 +182,18 @@ pub struct GradientUpdate {
     pub eligibility_trace: Option<Vec<f32>>,
 }
 
-/// Eligibility trace batch for credit assignment in spiking networks.
+/// IPC transport batch of eligibility traces for credit assignment.
+///
+/// This is a **wire-level** payload for [`IpcMessage::EligibilityTraces`].
+/// Field names and layout are part of the serialized protocol.
+///
+/// **Not** [`SynapticDistill.jl`](https://github.com/rmems/SynapticDistill.jl)'s
+/// training `TraceBatch` (a single unstructured `traces` field). This type
+/// carries `session_id` / `batch_id` plus typed [`TraceData`] rows. Use
+/// [`IpcTraceBatch`] when the name collision matters.
+///
+/// Names stay `TraceBatch` so existing Rust imports and serde identifiers
+/// remain compatible (RM-324 / #7).
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct TraceBatch {
     /// Session ID for routing.
@@ -146,7 +204,15 @@ pub struct TraceBatch {
     pub traces: Vec<TraceData>,
 }
 
-/// Individual eligibility trace data.
+/// Explicit IPC-domain name for [`TraceBatch`].
+///
+/// Same type and same wire format. Prefer this alias in new code that sits
+/// next to SynapticDistill training types.
+pub type IpcTraceBatch = TraceBatch;
+
+/// Individual eligibility trace data on the IPC wire.
+///
+/// An element of an IPC [`TraceBatch`], not a SynapticDistill training trace.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct TraceData {
     /// Channel or synapse identifier.
@@ -217,4 +283,99 @@ pub struct BatchMetadata {
     pub source: Option<String>,
     /// Additional metadata fields.
     pub custom: std::collections::HashMap<String, String>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn sample_spike_batch() -> SpikeBatch {
+        SpikeBatch {
+            session_id: Some("sess-1".into()),
+            batch_id: 7,
+            timestamp: 1_700_000_000,
+            spikes: vec![SpikeEvent {
+                channel: 3,
+                time: 11,
+                strength: 0.5,
+            }],
+            metadata: None,
+        }
+    }
+
+    fn sample_trace_batch() -> TraceBatch {
+        TraceBatch {
+            session_id: "sess-1".into(),
+            batch_id: 7,
+            traces: vec![TraceData {
+                channel_id: 3,
+                trace_value: 0.25,
+                last_spike_time: 11,
+            }],
+        }
+    }
+
+    #[test]
+    fn ipc_aliases_are_the_same_types() {
+        fn as_ipc_spike(batch: IpcSpikeBatch) -> SpikeBatch {
+            batch
+        }
+        fn as_ipc_trace(batch: IpcTraceBatch) -> TraceBatch {
+            batch
+        }
+        let _ = as_ipc_spike(sample_spike_batch());
+        let _ = as_ipc_trace(sample_trace_batch());
+    }
+
+    #[test]
+    fn spike_batch_json_keys_stay_stable() {
+        let json = serde_json::to_value(sample_spike_batch()).unwrap();
+        assert_eq!(
+            json,
+            serde_json::json!({
+                "session_id": "sess-1",
+                "batch_id": 7,
+                "timestamp": 1_700_000_000,
+                "spikes": [{
+                    "channel": 3,
+                    "time": 11,
+                    "strength": 0.5
+                }],
+                "metadata": null
+            })
+        );
+    }
+
+    #[test]
+    fn trace_batch_json_keys_stay_stable() {
+        let json = serde_json::to_value(sample_trace_batch()).unwrap();
+        assert_eq!(
+            json,
+            serde_json::json!({
+                "session_id": "sess-1",
+                "batch_id": 7,
+                "traces": [{
+                    "channel_id": 3,
+                    "trace_value": 0.25,
+                    "last_spike_time": 11
+                }]
+            })
+        );
+    }
+
+    #[test]
+    fn ipc_message_envelopes_keep_variant_names() {
+        let spikes = serde_json::to_value(IpcMessage::Spikes(sample_spike_batch())).unwrap();
+        let traces =
+            serde_json::to_value(IpcMessage::EligibilityTraces(sample_trace_batch())).unwrap();
+        assert!(spikes.get("Spikes").is_some());
+        assert!(traces.get("EligibilityTraces").is_some());
+        let decoded_spikes: IpcMessage = serde_json::from_value(spikes).unwrap();
+        let decoded_traces: IpcMessage = serde_json::from_value(traces).unwrap();
+        assert_eq!(decoded_spikes, IpcMessage::Spikes(sample_spike_batch()));
+        assert_eq!(
+            decoded_traces,
+            IpcMessage::EligibilityTraces(sample_trace_batch())
+        );
+    }
 }

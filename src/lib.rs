@@ -22,7 +22,8 @@ pub use error::BackendError;
 /// Re-export all public data models used on the wire.
 pub use models::{
     BatchMetadata, ConfigPayload, ConfigValue, EmbeddingBatch, GradientBatch, GradientUpdate,
-    IpcMessage, NeuromodulatorSnapshot, SpikeBatch, SpikeEvent, TraceBatch, TraceData,
+    IpcMessage, IpcSpikeBatch, IpcTraceBatch, NeuromodulatorSnapshot, SpikeBatch, SpikeEvent,
+    TraceBatch, TraceData,
 };
 /// Re-export the core trait, factory, and backend.
 pub use rust_backend::RustBackend;

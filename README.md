@@ -13,10 +13,10 @@ Inter-Process Communication (IPC) library for bridging Rust to external compute 
 - `ZmqIpcBackend` backend via ZMQ SUB socket (feature `zmq`)
 - Canonical protocol models:
   - `IpcMessage`
-  - `SpikeBatch`, `SpikeEvent`
+  - `SpikeBatch`, `SpikeEvent` (IPC wire types; alias `IpcSpikeBatch`)
   - `EmbeddingBatch`
   - `GradientBatch`, `GradientUpdate`
-  - `TraceBatch`, `TraceData`
+  - `TraceBatch`, `TraceData` (IPC wire types; alias `IpcTraceBatch`)
   - `ConfigPayload`, `ConfigValue`, `BatchMetadata`
 - `HybridFlowBackend` trait for message-oriented hybrid transports
 - `NeuromodulatorSnapshot` for parsed runtime readout payloads
@@ -57,6 +57,23 @@ Use these re-exports directly from crate root:
 use corpus_ipc::{IpcMessage, SpikeBatch, EmbeddingBatch};
 ```
 
+### `SpikeBatch` / `TraceBatch` are IPC transport types
+
+These names are **wire payloads**, not the training-side types in
+[`SynapticDistill.jl`](https://github.com/rmems/SynapticDistill.jl)
+(`src/types.jl`).
+
+| Crate | Domain | `SpikeBatch` | `TraceBatch` |
+| --- | --- | --- | --- |
+| `corpus-ipc` | IPC transport | session/batch id + `SpikeEvent` list | session/batch id + `TraceData` rows |
+| `SynapticDistill.jl` | SNN training | spike trains + optional `times` / `targets` | unstructured e-prop `traces` |
+
+The Rust type names stay `SpikeBatch` / `TraceBatch` so serde identifiers
+(`IpcMessage::Spikes`, `IpcMessage::EligibilityTraces`) and existing imports
+remain compatible. When the collision would be confusing, use the aliases
+`IpcSpikeBatch` and `IpcTraceBatch` — they are the same types and the same
+wire format.
+
 ## Crate Exports
 
 - Backends and traits:
@@ -66,6 +83,7 @@ use corpus_ipc::{IpcMessage, SpikeBatch, EmbeddingBatch};
   - `ZmqIpcBackend` (when `zmq` feature enabled)
 - Models:
   - `IpcMessage` and all batch/config/trace/gradient payload structs
+  - `IpcSpikeBatch` / `IpcTraceBatch` aliases for the IPC wire batches
   - `NeuromodulatorSnapshot`
 
 ## License
