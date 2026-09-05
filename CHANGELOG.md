@@ -12,6 +12,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - GitHub Actions CI workflow for automated validation (fmt, clippy, build, test) (#10).
+- Deprecated compatibility aliases after the #20 IPC rename (RM-334, #13, LIM-169):
+  - `RuntimeBackend` → `IpcBackend`
+  - `ZmqRuntimeBackend` → `ZmqIpcBackend`
+  - `BackendType::ZmqRuntime` → `BackendType::ZmqIpc`
+  Both current and deprecated ZMQ selectors construct `ZmqIpcBackend`.
+  Compile-time tests assert that `RustBackend` and `ZmqIpcBackend` implement `IpcBackend`.
 
 ### Changed
 

@@ -1,6 +1,15 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
-//! `IpcBackend` trait and `BackendType` enumeration.
+//! Canonical IPC backend traits and the `BackendType` factory selector.
+//!
+//! [`IpcBackend`] is the required contract for every backend. [`HybridFlowBackend`]
+//! is an optional companion for message-oriented transports that exchange
+//! structured [`SpikeBatch`] / [`EmbeddingBatch`] / [`GradientBatch`] /
+//! [`TraceBatch`] payloads.
+//!
+//! Pre-rename names (`RuntimeBackend`, `BackendType::ZmqRuntime`) remain as
+//! deprecated compatibility aliases so downstream crates can migrate off the
+//! #20 breaking rename without a hard cut.
 
 use crate::{BackendError, EmbeddingBatch, GradientBatch, RustBackend, SpikeBatch, TraceBatch};
 
@@ -8,7 +17,9 @@ use crate::{BackendError, EmbeddingBatch, GradientBatch, RustBackend, SpikeBatch
 ///
 /// Abstracts over the compute processing layer, allowing different backend
 /// implementations (Rust-native, native or network IPC) to be used
-/// interchangeably.
+/// interchangeably. This is the neuromod-aligned contract: every backend
+/// (including `ZmqIpcBackend` when the `zmq` feature is enabled)
+/// implements this trait.
 ///
 /// # Output contract
 ///
@@ -41,6 +52,14 @@ pub trait IpcBackend: Send + Sync {
     /// as potentially requiring re-connection for such backends.
     fn reset(&mut self) -> Result<(), BackendError>;
 }
+
+/// Deprecated compatibility name for [`IpcBackend`].
+///
+/// Prefer [`IpcBackend`] in new code. This alias exists so crates that still
+/// import `RuntimeBackend` after the #20 rename keep compiling during the
+/// deprecation window.
+#[deprecated(since = "0.1.0", note = "renamed to IpcBackend")]
+pub use IpcBackend as RuntimeBackend;
 
 /// Optional high-level hybrid flow interface for message-oriented IPC backends.
 ///
@@ -75,6 +94,10 @@ pub enum BackendType {
     /// IPC backend via ZMQ SUB socket (requires feature `zmq`).
     #[cfg(feature = "zmq")]
     ZmqIpc,
+    /// Deprecated compatibility selector for [`BackendType::ZmqIpc`].
+    #[cfg(feature = "zmq")]
+    #[deprecated(since = "0.1.0", note = "renamed to BackendType::ZmqIpc")]
+    ZmqRuntime,
 }
 
 /// Factory for creating `IpcBackend` instances.
@@ -92,7 +115,45 @@ impl BackendFactory {
         match backend_type {
             BackendType::Rust => Box::new(RustBackend::new()),
             #[cfg(feature = "zmq")]
-            BackendType::ZmqIpc => Box::new(crate::ZmqIpcBackend::new()),
+            #[allow(deprecated)]
+            BackendType::ZmqIpc | BackendType::ZmqRuntime => Box::new(crate::ZmqIpcBackend::new()),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::RustBackend;
+
+    fn assert_ipc_backend<T: IpcBackend>() {}
+
+    #[test]
+    fn rust_backend_implements_ipc_backend() {
+        assert_ipc_backend::<RustBackend>();
+        let backend = BackendFactory::create(BackendType::Rust);
+        // Trait object construction is the factory contract.
+        let _: Box<dyn IpcBackend> = backend;
+    }
+
+    #[test]
+    #[allow(deprecated)]
+    fn runtime_backend_alias_is_ipc_backend() {
+        fn assert_runtime_backend<T: RuntimeBackend>() {}
+        assert_runtime_backend::<RustBackend>();
+    }
+
+    #[cfg(feature = "zmq")]
+    #[test]
+    fn zmq_backend_implements_ipc_backend() {
+        assert_ipc_backend::<crate::ZmqIpcBackend>();
+        let _: Box<dyn IpcBackend> = BackendFactory::create(BackendType::ZmqIpc);
+    }
+
+    #[cfg(feature = "zmq")]
+    #[test]
+    #[allow(deprecated)]
+    fn deprecated_zmq_runtime_selector_creates_zmq_backend() {
+        let _: Box<dyn IpcBackend> = BackendFactory::create(BackendType::ZmqRuntime);
     }
 }
